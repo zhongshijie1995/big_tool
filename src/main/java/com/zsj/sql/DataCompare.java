@@ -10,20 +10,25 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.text.MessageFormat;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.logging.Logger;
 
 public class DataCompare {
 
     public static final String DATA_COMPARE_YAML = "DataCompare.yaml";
-    public static final String COMPARE_SQL = "select {0} from {1}@{2} where {3} minus select {4} from {5} where {6}";
     public static final String SELECT_SQL = "select {0} from {1}{2} where {3}";
-    public static final String COMPARE_COUNT = "select count(*) as count from ({0})\n";
+    public static final String MINUS_SQL = "({0}) minus ({1})";
+    public static final String COMPARE_COUNT = "select count(*) as count from ({0})";
+
+    private Connection connection;
 
     public static void main(String[] args) {
         DataCompare dataCompare = new DataCompare();
-        dataCompare.execCompare(dataCompare.getCompareSQLMap(dataCompare.getConfig(null)));
+        Config config = dataCompare.getConfig(null);
+        dataCompare.execCompare(dataCompare.getCompareSQLMap(config), config);
     }
 
     public Config getConfig(String filePath) {
@@ -35,50 +40,54 @@ public class DataCompare {
         return yaml.load(inputStream);
     }
 
-    public String genCompareSQL(Config.Tab tab, Config.DB db) {
-        return MessageFormat.format(
-                COMPARE_SQL,
+    public Map<String, String> genCompareSQL(Config.Tab tab, Config.DB a, Config.DB b) {
+        Map<String, String> selectSqlMap = new HashMap<>();
+
+        String selectSqlA = MessageFormat.format(SELECT_SQL,
                 tab.getColNames(),
                 tab.getTabName(),
-                db.getDbLinkName(),
-                tab.getDiffCols() == null ? "1=1" : tab.getDiffCols(),
-                tab.getColNames(),
-                tab.getTabName(),
-                tab.getDiffCols() == null ? "1=1" : tab.getDiffCols()
+                a.getDbLinkName() != null ? a.getDbLinkName() : "",
+                tab.getDiffCols() != null ? tab.getDiffCols() : "1=1"
         );
+        String selectSqlB = MessageFormat.format(SELECT_SQL,
+                tab.getColNames(),
+                tab.getTabName(),
+                b.getDbLinkName() != null ? b.getDbLinkName() : "",
+                tab.getDiffCols() != null ? tab.getDiffCols() : "1=1"
+        );
+        selectSqlMap.put(
+                a.getName() + "-" + b.getName(),
+                MessageFormat.format(MINUS_SQL, selectSqlA, selectSqlB)
+        );
+        selectSqlMap.put(
+                b.getName() + "-" + a.getName(),
+                MessageFormat.format(MINUS_SQL, selectSqlB, selectSqlA)
+        );
+        return selectSqlMap;
     }
 
     public String genCountSQL(String sql) {
         return MessageFormat.format(COMPARE_COUNT, sql);
     }
 
-    public Map<String, Map<Config.DB, String>> getCompareSQLMap(Config config) {
-        Map<String, Map<Config.DB, String>> compareSQLMap = new HashMap<>();
-
-        Config.DB dbA = config.getDbs().getA();
-        Config.DB dbB = config.getDbs().getB();
-
+    public Map<String, Map<String, String>> getCompareSQLMap(Config config) {
+        Map<String, Map<String, String>> compareSqlMap = new HashMap<>();
         for (Config.Tab tab : config.getTabs()) {
-            Map<Config.DB, String> querySqlMap = new HashMap<>();
-
-            querySqlMap.put(dbA, genCompareSQL(tab, dbB));
-            querySqlMap.put(dbB, genCompareSQL(tab, dbA));
-
-            compareSQLMap.put(tab.getTabName(), querySqlMap);
+            compareSqlMap.put(tab.getTabName(), genCompareSQL(tab, config.getA(), config.getB()));
         }
-
-        return compareSQLMap;
+        return compareSqlMap;
     }
 
-    public void execCompare(Map<String, Map<Config.DB, String>> compareSQLMap) {
-        DataFrame<Object> df = new DataFrame<>("表名", "数据主体", "独有数据条数", "详情SQL");
+    public void execCompare(Map<String, Map<String, String>> compareSQLMap, Config config) {
+        init_conn(config);
+        DataFrame<Object> df = new DataFrame<>("表名", "数据情况", "独有数据条数", "详情SQL");
         compareSQLMap.forEach((tab, queryMap) -> {
-            queryMap.forEach((db, sql) -> {
-                String countCompareSQL = genCountSQL(sql);
-                int diffCount = queryOne(db, countCompareSQL);
-                df.append(Arrays.asList(tab, db.getName(), diffCount, sql));
+            Logger.getLogger("").info("正在处理：" + tab);
+            queryMap.forEach((type, sql) -> {
+                df.append(Arrays.asList(tab, type, queryOne(genCountSQL(sql)), sql));
             });
         });
+        close_conn();
         try {
             String now = new SimpleDateFormat("yyMMddHHmm").format(new Date(System.currentTimeMillis()));
             df.writeCsv(MessageFormat.format("DataCompareResult-{0}.csv", now));
@@ -87,30 +96,44 @@ public class DataCompare {
         }
     }
 
-    private int queryOne(Config.DB db, String sql) {
-        int result = 0;
-        try (Connection conn = DriverManager.getConnection(db.getUrl(), db.getUsr(), db.getPwd())) {
-            SqlRunner runner = new SqlRunner(conn);
-            Map<String, Object> queryResult = runner.selectOne(sql);
-            result = Integer.parseInt(queryResult.get("COUNT").toString());
-        } catch (Exception e) {
-            e.printStackTrace();
+    public void init_conn(Config config) {
+        Config.DB db = config.getConn();
+        try {
+            connection = DriverManager.getConnection(db.getUrl(), db.getUsr(), db.getPwd());
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
+    }
+
+    public void close_conn() {
+        if (null != connection) {
+            try {
+                connection.close();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    private int queryOne(String sql) {
+        int result = 0;
+        SqlRunner runner = new SqlRunner(connection);
+        Map<String, Object> queryResult = null;
+        try {
+            queryResult = runner.selectOne(sql);
+        } catch (SQLException e) {
+            result = -1;
+        }
+        result = Integer.parseInt(queryResult.get("COUNT").toString());
         return result;
     }
 
     @Data
     public static class Config {
         private DB conn;
-        private DBs dbs;
-        private List<String> diff;
+        private DB a;
+        private DB b;
         private List<Tab> tabs;
-
-        @Data
-        public static class DBs {
-            private DB a;
-            private DB b;
-        }
 
         @Data
         public static class DB {

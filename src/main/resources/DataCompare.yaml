@@ -1,25 +1,25 @@
+# 执行SQL的数据库，可以为第三方（已创建a和b的DBLink）的数据库
 conn:
   name: 执行数据库
   dbLinkName: big_test_a
   url: jdbc:oracle:thin:@192.168.0.101:1521:orcl
   usr: big_test_a
   pwd: big_test_a
-dbs:
-  a:
-    name: 生产
-    dbLinkName: @big_test_a
-    url: jdbc:oracle:thin:@192.168.0.101:1521:orcl
-    usr: big_test_a
-    pwd: big_test_a
-  b:
-    name: 测试
-    dbLinkName:
-    url: jdbc:oracle:thin:@192.168.0.101:1521:orcl
-    usr: big_test_b
-    pwd: big_test_b
-diff:
-  - 462000
-  - 810000
+# 数据库A，登陆信息可不填
+a:
+  name: 测试
+  dbLinkName:
+  url: jdbc:oracle:thin:@192.168.0.101:1521:orcl
+  usr: big_test_a
+  pwd: big_test_a
+# 数据库B，登陆信息可不填
+b:
+  name: 生产
+  dbLinkName: "@big_test_b"
+  url: jdbc:oracle:thin:@192.168.0.101:1521:orcl
+  usr: big_test_b
+  pwd: big_test_b
+# 需要对比的表配置
 tabs:
   - tabName: vw_test
     colNames: "*"
