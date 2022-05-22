@@ -19,11 +19,3 @@ b:
   url: jdbc:oracle:thin:@192.168.0.101:1521:orcl
   usr: big_test_b
   pwd: big_test_b
-# 需要对比的表配置
-tabs:
-  - tabName: vw_test
-    colNames: "*"
-    diffCols:
-  - tabName: tab_test
-    colNames: "*"
-    diffCols:

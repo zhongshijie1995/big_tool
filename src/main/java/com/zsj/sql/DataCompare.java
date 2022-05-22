@@ -19,6 +19,7 @@ import java.util.logging.Logger;
 public class DataCompare {
 
     public static final String DATA_COMPARE_YAML = "DataCompare.yaml";
+    public static final String DATA_COMPARE_CSV = "DataCompare.csv";
     public static final String SELECT_SQL = "select {0} from {1}{2} where {3}";
     public static final String MINUS_SQL = "({0}) minus ({1})";
     public static final String COMPARE_COUNT = "select count(*) as count from ({0})";
@@ -28,6 +29,18 @@ public class DataCompare {
     public static void main(String[] args) {
         DataCompare dataCompare = new DataCompare();
         Config config = dataCompare.getConfig(null);
+
+        List<Config.Tab> tabs = new ArrayList<>();
+        DataFrame<Object> df = dataCompare.getDataCompareCsv(null);
+        for (int i = 0; i < df.length(); i++) {
+            Config.Tab tab = new Config.Tab();
+            tab.setTabName(df.get(i, 0).toString());
+            tab.setColNames(df.get(i, 1).toString());
+            tab.setDiffCols(df.get(i, 2) != null ? df.get(i, 2).toString() : null);
+            tabs.add(tab);
+        }
+        config.setTabs(tabs);
+
         dataCompare.execCompare(dataCompare.getCompareSQLMap(config), config);
     }
 
@@ -38,6 +51,20 @@ public class DataCompare {
         if (null == inputStream) return null;
         Yaml yaml = new Yaml(new Constructor(Config.class));
         return yaml.load(inputStream);
+    }
+
+    public DataFrame<Object> getDataCompareCsv(String filePath) {
+        InputStream inputStream;
+        filePath = null == filePath ? DATA_COMPARE_CSV : filePath;
+        inputStream = this.getClass().getClassLoader().getResourceAsStream(filePath);
+        if (null == inputStream) return null;
+        DataFrame<Object> df = null;
+        try {
+            df = DataFrame.readCsv(inputStream);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return df;
     }
 
     public Map<String, String> genCompareSQL(Config.Tab tab, Config.DB a, Config.DB b) {
