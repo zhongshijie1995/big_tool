@@ -1,0 +1,29 @@
+conn:
+  name: 执行数据库
+  dbLinkName: big_test_a
+  url: jdbc:oracle:thin:@192.168.0.101:1521:orcl
+  usr: big_test_a
+  pwd: big_test_a
+dbs:
+  a:
+    name: 生产
+    dbLinkName: @big_test_a
+    url: jdbc:oracle:thin:@192.168.0.101:1521:orcl
+    usr: big_test_a
+    pwd: big_test_a
+  b:
+    name: 测试
+    dbLinkName:
+    url: jdbc:oracle:thin:@192.168.0.101:1521:orcl
+    usr: big_test_b
+    pwd: big_test_b
+diff:
+  - 462000
+  - 810000
+tabs:
+  - tabName: vw_test
+    colNames: "*"
+    diffCols:
+  - tabName: tab_test
+    colNames: "*"
+    diffCols:
