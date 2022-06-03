@@ -58,7 +58,7 @@ public class DataCompare {
         filePath = null == filePath ? DATA_COMPARE_CSV : filePath;
         inputStream = this.getClass().getClassLoader().getResourceAsStream(filePath);
         if (null == inputStream) return null;
-        DataFrame<Object> df = null;
+        DataFrame<Object> df;
         try {
             df = DataFrame.readCsv(inputStream);
         } catch (IOException e) {
@@ -110,9 +110,7 @@ public class DataCompare {
         DataFrame<Object> df = new DataFrame<>("表名", "数据情况", "独有数据条数", "详情SQL");
         compareSQLMap.forEach((tab, queryMap) -> {
             Logger.getLogger("").info("正在处理：" + tab);
-            queryMap.forEach((type, sql) -> {
-                df.append(Arrays.asList(tab, type, queryOne(genCountSQL(sql)), sql));
-            });
+            queryMap.forEach((type, sql) -> df.append(Arrays.asList(tab, type, queryOne(genCountSQL(sql)), sql)));
         });
         close_conn();
         try {
@@ -143,15 +141,15 @@ public class DataCompare {
     }
 
     private int queryOne(String sql) {
-        int result = 0;
+        int result;
         SqlRunner runner = new SqlRunner(connection);
-        Map<String, Object> queryResult = null;
+        Map<String, Object> queryResult;
         try {
             queryResult = runner.selectOne(sql);
+            result = Integer.parseInt(queryResult.get("COUNT").toString());
         } catch (SQLException e) {
             result = -1;
         }
-        result = Integer.parseInt(queryResult.get("COUNT").toString());
         return result;
     }
 
